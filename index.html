@@ -837,27 +837,96 @@
   setInterval(tick, 1000);
 
   /* ---------- RSVP form: submits quietly to Google Forms, then shows our own success message ---------- */
-  const rsvpForm = document.getElementById('rsvp-form');
-  const rsvpSuccess = document.getElementById('rsvp-success');
-  rsvpForm.addEventListener('submit', function(e){
-    e.preventDefault();
+/* ---------- RSVP FORM → GOOGLE FORMS → GOOGLE SHEETS ---------- */
 
-    const params = new URLSearchParams();
-    params.append(GOOGLE_FORM_ENTRIES.name, document.getElementById('r-name').value);
-    params.append(GOOGLE_FORM_ENTRIES.guests, document.getElementById('r-guests').value);
-    params.append(GOOGLE_FORM_ENTRIES.event, document.getElementById('r-event').value);
-    params.append(GOOGLE_FORM_ENTRIES.message, document.getElementById('r-msg').value);
+const rsvpForm = document.getElementById('rsvp-form');
+const rsvpSuccess = document.getElementById('rsvp-success');
 
-    // "no-cors" means we can't read the response, but the submission still goes through —
-    // this is the standard way to post to Google Forms from another page.
-    // URLSearchParams (application/x-www-form-urlencoded) is what Google Forms' own
-    // submit page sends, so it's the most reliable content-type to use here.
-    fetch(GOOGLE_FORM_ACTION, { method: 'POST', mode: 'no-cors', body: params })
-      .catch(function(){ /* network hiccup — we still show success below so the guest isn't blocked */ });
+rsvpForm.addEventListener('submit', function(e) {
+  e.preventDefault();
 
-    rsvpForm.style.display='none';
+  // Get values from the custom wedding website form
+  const name = document.getElementById('r-name').value.trim();
+  const guests = document.getElementById('r-guests').value;
+  const event = document.getElementById('r-event').value;
+  const message = document.getElementById('r-msg').value.trim();
+
+  // Basic validation
+  if (!name || !guests || !event) {
+    alert('Please fill in all required fields.');
+    return;
+  }
+
+  /*
+    Create a hidden iframe.
+
+    The Google Form submission will happen inside this iframe,
+    so the guest will NOT be redirected to Google Forms.
+  */
+  const iframeName = 'google-form-submit-frame-' + Date.now();
+
+  const iframe = document.createElement('iframe');
+  iframe.name = iframeName;
+  iframe.style.display = 'none';
+  iframe.setAttribute('aria-hidden', 'true');
+
+  document.body.appendChild(iframe);
+
+  /*
+    Create a temporary HTML form that submits directly
+    to Google's formResponse endpoint.
+  */
+  const googleForm = document.createElement('form');
+
+  googleForm.method = 'POST';
+  googleForm.action = GOOGLE_FORM_ACTION;
+  googleForm.target = iframeName;
+  googleForm.style.display = 'none';
+
+  // Helper function to create hidden Google Form fields
+  function addGoogleField(name, value) {
+    const input = document.createElement('input');
+
+    input.type = 'hidden';
+    input.name = name;
+    input.value = value;
+
+    googleForm.appendChild(input);
+  }
+
+  // Add the four Google Form fields
+  addGoogleField(GOOGLE_FORM_ENTRIES.name, name);
+  addGoogleField(GOOGLE_FORM_ENTRIES.guests, guests);
+  addGoogleField(GOOGLE_FORM_ENTRIES.event, event);
+  addGoogleField(GOOGLE_FORM_ENTRIES.message, message);
+
+  // Add the temporary form to the page
+  document.body.appendChild(googleForm);
+
+  /*
+    Submit to Google Forms.
+    The response loads inside the hidden iframe.
+  */
+  googleForm.submit();
+
+  /*
+    Give Google Forms a moment to process the response,
+    then show the custom success message.
+  */
+  setTimeout(function() {
+
+    // Hide the RSVP form
+    rsvpForm.style.display = 'none';
+
+    // Show your existing success message
     rsvpSuccess.classList.add('show');
-  });
+
+    // Clean up temporary elements
+    googleForm.remove();
+    iframe.remove();
+
+  }, 1500);
+});
 
   /* ---------- background music: try to autoplay from the very first moment,
      with a silent fallback that starts it on the visitor's first tap/click/key
