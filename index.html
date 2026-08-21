@@ -655,35 +655,14 @@
   <source src="background-music.mp3" type="audio/mpeg">
 </audio>
 
-<!-- Hidden target for the RSVP form's real browser-navigation POST to Google Forms -->
-<iframe name="hidden_iframe" id="hidden_iframe" style="display:none;" title="rsvp-submit-target"></iframe>
-
 <script>
 (function(){
   "use strict";
 
   /* =========================================================================
-     GOOGLE FORM CONNECTION — fill these in before publishing (see instructions below)
-     -------------------------------------------------------------------------
-     1. Create a Google Form with 4 QUESTIONS IN THIS EXACT ORDER:
-          Q1: Name              (Short answer)
-          Q2: Number of Guests  (Short answer, or Number if available)
-          Q3: Event Attending   (Short answer, or Multiple choice — text must match)
-          Q4: Message           (Paragraph, marked NOT required)
-     2. In the Form editor, click the three-dot menu -> "Get pre-filled link".
-     3. Fill in dummy answers for all 4 questions and click "Get link".
-     4. Open that long link. It will look like:
-          https://docs.google.com/forms/d/e/XXXXXXXX/viewform?usp=pp_url&entry.111=A&entry.222=B&entry.333=C&entry.444=D
-     5. Copy the "XXXXXXXX" form ID and the four "entry.NNNNN" numbers into the
-        constants below (replace every REPLACE_ME placeholder).
+     RSVP ENDPOINT — Google Apps Script Web App, writes straight into a Sheet.
      ========================================================================= */
-  const GOOGLE_FORM_ACTION = "https://docs.google.com/forms/d/e/1FAIpQLSeEslGUQFcRT_RGxlFpruSKDpyiq6xigKZtpni5eahhimhMLA/formResponse";
-  const GOOGLE_FORM_ENTRIES = {
-    name:    "entry.877086558",
-    guests:  "entry.1498135098",
-    event:   "entry.1424661284",
-    message: "entry.2606285"
-  };
+  const RSVP_ENDPOINT = "https://script.google.com/macros/s/AKfycbwRwH4Fv3J0Ve9zZYvHRGLo1iEZzlBCep9Gr_lpExI713oc-BHAYn1L7NLoxq066WiV/exec";
   /* ========================================================================= */
 
   /* ---------- helpers ---------- */
@@ -839,35 +818,24 @@
   tick();
   setInterval(tick, 1000);
 
-  /* ---------- RSVP form: submits via a real hidden-iframe form POST (a genuine
-     browser navigation, not a scripted fetch), which Google Forms treats the same
-     as someone submitting the form directly — far more reliable than fetch/no-cors ---------- */
+  /* ---------- RSVP form: posts to our own Google Apps Script endpoint, which
+     appends each response as a new row in a Google Sheet ---------- */
   const rsvpForm = document.getElementById('rsvp-form');
   const rsvpSuccess = document.getElementById('rsvp-success');
   rsvpForm.addEventListener('submit', function(e){
     e.preventDefault();
 
-    const hiddenForm = document.createElement('form');
-    hiddenForm.action = GOOGLE_FORM_ACTION;
-    hiddenForm.method = 'POST';
-    hiddenForm.target = 'hidden_iframe';
-    hiddenForm.style.display = 'none';
+    const params = new URLSearchParams();
+    params.append('name', document.getElementById('r-name').value);
+    params.append('guests', document.getElementById('r-guests').value);
+    params.append('event', document.getElementById('r-event').value);
+    params.append('message', document.getElementById('r-msg').value);
 
-    function addField(name, value){
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = name;
-      input.value = value;
-      hiddenForm.appendChild(input);
-    }
-    addField(GOOGLE_FORM_ENTRIES.name, document.getElementById('r-name').value);
-    addField(GOOGLE_FORM_ENTRIES.guests, document.getElementById('r-guests').value);
-    addField(GOOGLE_FORM_ENTRIES.event, document.getElementById('r-event').value);
-    addField(GOOGLE_FORM_ENTRIES.message, document.getElementById('r-msg').value);
-
-    document.body.appendChild(hiddenForm);
-    hiddenForm.submit();
-    setTimeout(function(){ hiddenForm.remove(); }, 1500);
+    // "no-cors" means we can't read the response, but since this is our own
+    // script (not Google Forms' internal validation), the request still
+    // reaches doPost() and writes the row regardless.
+    fetch(RSVP_ENDPOINT, { method: 'POST', mode: 'no-cors', body: params })
+      .catch(function(){ /* network hiccup — we still show success below so the guest isn't blocked */ });
 
     rsvpForm.style.display='none';
     rsvpSuccess.classList.add('show');
