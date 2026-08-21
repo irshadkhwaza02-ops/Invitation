@@ -655,6 +655,9 @@
   <source src="background-music.mp3" type="audio/mpeg">
 </audio>
 
+<!-- Hidden target for the RSVP form's real browser-navigation POST to Google Forms -->
+<iframe name="hidden_iframe" id="hidden_iframe" style="display:none;" title="rsvp-submit-target"></iframe>
+
 <script>
 (function(){
   "use strict";
@@ -836,97 +839,39 @@
   tick();
   setInterval(tick, 1000);
 
-  /* ---------- RSVP form: submits quietly to Google Forms, then shows our own success message ---------- */
-/* ---------- RSVP FORM → GOOGLE FORMS → GOOGLE SHEETS ---------- */
+  /* ---------- RSVP form: submits via a real hidden-iframe form POST (a genuine
+     browser navigation, not a scripted fetch), which Google Forms treats the same
+     as someone submitting the form directly — far more reliable than fetch/no-cors ---------- */
+  const rsvpForm = document.getElementById('rsvp-form');
+  const rsvpSuccess = document.getElementById('rsvp-success');
+  rsvpForm.addEventListener('submit', function(e){
+    e.preventDefault();
 
-const rsvpForm = document.getElementById('rsvp-form');
-const rsvpSuccess = document.getElementById('rsvp-success');
+    const hiddenForm = document.createElement('form');
+    hiddenForm.action = GOOGLE_FORM_ACTION;
+    hiddenForm.method = 'POST';
+    hiddenForm.target = 'hidden_iframe';
+    hiddenForm.style.display = 'none';
 
-rsvpForm.addEventListener('submit', function(e) {
-  e.preventDefault();
+    function addField(name, value){
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = value;
+      hiddenForm.appendChild(input);
+    }
+    addField(GOOGLE_FORM_ENTRIES.name, document.getElementById('r-name').value);
+    addField(GOOGLE_FORM_ENTRIES.guests, document.getElementById('r-guests').value);
+    addField(GOOGLE_FORM_ENTRIES.event, document.getElementById('r-event').value);
+    addField(GOOGLE_FORM_ENTRIES.message, document.getElementById('r-msg').value);
 
-  // Get values from the custom wedding website form
-  const name = document.getElementById('r-name').value.trim();
-  const guests = document.getElementById('r-guests').value;
-  const event = document.getElementById('r-event').value;
-  const message = document.getElementById('r-msg').value.trim();
+    document.body.appendChild(hiddenForm);
+    hiddenForm.submit();
+    setTimeout(function(){ hiddenForm.remove(); }, 1500);
 
-  // Basic validation
-  if (!name || !guests || !event) {
-    alert('Please fill in all required fields.');
-    return;
-  }
-
-  /*
-    Create a hidden iframe.
-
-    The Google Form submission will happen inside this iframe,
-    so the guest will NOT be redirected to Google Forms.
-  */
-  const iframeName = 'google-form-submit-frame-' + Date.now();
-
-  const iframe = document.createElement('iframe');
-  iframe.name = iframeName;
-  iframe.style.display = 'none';
-  iframe.setAttribute('aria-hidden', 'true');
-
-  document.body.appendChild(iframe);
-
-  /*
-    Create a temporary HTML form that submits directly
-    to Google's formResponse endpoint.
-  */
-  const googleForm = document.createElement('form');
-
-  googleForm.method = 'POST';
-  googleForm.action = GOOGLE_FORM_ACTION;
-  googleForm.target = iframeName;
-  googleForm.style.display = 'none';
-
-  // Helper function to create hidden Google Form fields
-  function addGoogleField(name, value) {
-    const input = document.createElement('input');
-
-    input.type = 'hidden';
-    input.name = name;
-    input.value = value;
-
-    googleForm.appendChild(input);
-  }
-
-  // Add the four Google Form fields
-  addGoogleField(GOOGLE_FORM_ENTRIES.name, name);
-  addGoogleField(GOOGLE_FORM_ENTRIES.guests, guests);
-  addGoogleField(GOOGLE_FORM_ENTRIES.event, event);
-  addGoogleField(GOOGLE_FORM_ENTRIES.message, message);
-
-  // Add the temporary form to the page
-  document.body.appendChild(googleForm);
-
-  /*
-    Submit to Google Forms.
-    The response loads inside the hidden iframe.
-  */
-  googleForm.submit();
-
-  /*
-    Give Google Forms a moment to process the response,
-    then show the custom success message.
-  */
-  setTimeout(function() {
-
-    // Hide the RSVP form
-    rsvpForm.style.display = 'none';
-
-    // Show your existing success message
+    rsvpForm.style.display='none';
     rsvpSuccess.classList.add('show');
-
-    // Clean up temporary elements
-    googleForm.remove();
-    iframe.remove();
-
-  }, 1500);
-});
+  });
 
   /* ---------- background music: try to autoplay from the very first moment,
      with a silent fallback that starts it on the visitor's first tap/click/key
